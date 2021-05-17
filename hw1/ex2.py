@@ -4,8 +4,10 @@ import scipy.stats as sct
 import numpy as np
 import matplotlib.pyplot as plt
 
+#function for ex. 2b
 def aprox():
     np.random.seed(54321)
+    
     nmax = 10000
     #X axis
     x_axis = np.arange(100, nmax + 100, 100)
@@ -22,10 +24,10 @@ def aprox():
         #sample contains the x_i's
         sample = sct.poisson.rvs(mu, size=n)
         #sample = rng.poisson(lam=(4), size=(10000, 2))
-
+        
         #Calculate the average of the sample
         mu_estim.append(sample.mean())
-        
+
     #Create the convergence plot
     plt.plot(x_axis, mu_estim, '-g', alpha = 0.5)
     plt.hlines(y = mu_true, xmin = x_axis[0], 
@@ -37,5 +39,7 @@ def aprox():
     plt.grid()
     plt.show()
 
+
 if __name__ == '__main__': 
     aprox()
+
