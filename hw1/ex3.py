@@ -26,8 +26,8 @@ def aprox():
             if i == x[0] or i == x[1]:
                 full = full + 1
 
-        fuck = full/len(o)
-        mu_estim.append(fuck)
+        f = full/len(o)
+        mu_estim.append(f)
         o.clear() 
         finalo.clear()
         full = 0
