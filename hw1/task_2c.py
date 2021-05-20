@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-
 def monte_carlo_simulation():
     np.random.seed(54321)
     nmax = 5000000
@@ -27,7 +26,6 @@ def monte_carlo_simulation():
     plt.xticks(rotation=90)
     plt.grid()
     plt.show()
-
 
 if __name__ == '__main__':
     monte_carlo_simulation()

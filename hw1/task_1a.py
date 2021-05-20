@@ -1,14 +1,15 @@
 from itertools import combinations
 
-
 def is_sigma_algebra(Omega, E):
+    # check if Omega is in E
     if Omega not in E:
         return False
+    # check if E is closed under complement
     for item in E:
         if Omega - item not in E:
             return False
-    indices = [i for i in range(len(E))]
-    for i in range(2, len(E)):
+    # check if E is closed under union
+    for i in range(2, len(E) + 1):
         combs = list(combinations(E, i))
         for comb in combs:
             union_res = set()
@@ -17,7 +18,6 @@ def is_sigma_algebra(Omega, E):
             if union_res not in E:
                 return False
     return True
-
 
 if __name__ == '__main__':
     # Example
