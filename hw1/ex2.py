@@ -14,7 +14,7 @@ def aprox():
 
     #To store each approximation of the expected value
     mu_estim = []
-    mu = 2.65
+    mu = 2.75
     r = sct.poisson(mu)
     mu_true = r.mean()
     print(mu_true)
