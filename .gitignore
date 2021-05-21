@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 aienv
+ex2.py
