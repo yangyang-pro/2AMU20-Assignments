@@ -10,8 +10,8 @@ class BinaryCLT:
         self.data = data
         self.root = root
         self.alpha = alpha 
-        Tcsr = minimum_spanning_tree(data)
-        Tcsr.toarray().astype(int)
+        #Tcsr = minimum_spanning_tree(data)
+        #Tcsr.toarray().astype(int)
 
     def get_tree(self):
         pass
