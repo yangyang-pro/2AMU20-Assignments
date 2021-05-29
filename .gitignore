@@ -130,3 +130,6 @@ dmypy.json
 
 aienv
 ex2.py
+#baudio.valid.data
+#baudio.test.data
+#baudio.train.data
