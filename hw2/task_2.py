@@ -16,13 +16,21 @@ class BinaryCLT:
         self.data = data
         self.root = root
         self.alpha = alpha
-        # for binary discrete random variables, the number of states is 2
+        # for binary discrete random variables, the number of states is 2: [0, 1]
         self.num_states = 2
+        # number of samples from the real distribution
+        self.num_samples = data.shape[0]
+        # number of random variables
+        self.num_rvs = data.shape[1]
         # Chow-Liu trees, stored as a sparse matrix
         self.clt = self.create_clt()
         # list of predecessors of the learned structure: If X_j is the parent of X_i then tree[i] =
         # j, while, if X_i is the root of the tree then tree[i] = -1.
         self.predecessors = None
+        # breadth first order of the clt
+        self.bfo = None
+        # conditional probabilities table of the clt
+        self.log_params = None
 
     def compute_mi(self, marginals_x, marginals_y, joints_xy):
         mi = 0
@@ -33,14 +41,9 @@ class BinaryCLT:
         return mi
 
     def create_clt(self):
-        # number of samples according to the real distribution
-        num_samples = self.data.shape[0]
-        # number of random variables
-        num_rvs = self.data.shape[1]
-
-        rvs = np.arange(num_rvs)
+        rvs = np.arange(self.num_rvs)
         rv_combinations = list(itertools.combinations(rvs, 2))
-        mi_matrix = np.zeros((num_rvs, num_rvs))
+        mi_matrix = np.zeros((self.num_rvs, self.num_rvs))
         for rv_combination in tqdm(rv_combinations):
             # current random variables
             x, y = rv_combination
@@ -54,22 +57,23 @@ class BinaryCLT:
             marginal_probs_y = np.zeros(self.num_states)
             for val in range(self.num_states):
                 num_samples_x, num_samples_y = sum(samples_x == val), sum(samples_y == val)
-                marginal_probs_x[val], marginal_probs_y[val] = num_samples_x / num_samples, num_samples_y / num_samples
+                marginal_probs_x[val] = num_samples_x / self.num_samples
+                marginal_probs_y[val] = num_samples_y / self.num_samples
 
             # calculate the joint probabilities of x and y by frequencies
             joint_probs_xy = np.zeros((self.num_states, self.num_states))
             for val_x in range(self.num_states):
                 for val_y in range(self.num_states):
-                    num_cur_samples = sum(np.logical_and(samples_x == val_x, samples_y == val_y))
-                    joint_probs_xy[val_x, val_y] = num_cur_samples / num_samples
+                    num_joint_samples = sum(np.logical_and(samples_x == val_x, samples_y == val_y))
+                    joint_probs_xy[val_x, val_y] = num_joint_samples / self.num_samples
             mi_matrix[x, y] = self.compute_mi(marginals_x=marginal_probs_x,
-                                                                marginals_y=marginal_probs_y,
-                                                                joints_xy=joint_probs_xy)
+                                              marginals_y=marginal_probs_y,
+                                              joints_xy=joint_probs_xy)
         maximum_spanning_tree = minimum_spanning_tree(-(mi_matrix + 1))
         return maximum_spanning_tree
 
     def get_tree(self):
-        predecessors = breadth_first_order(self.clt, i_start=self.root, directed=False)[1]
+        self.bfo, predecessors = breadth_first_order(self.clt, i_start=self.root, directed=False)
         predecessors[self.root] = -1
         self.predecessors = predecessors
         return self.predecessors
@@ -85,7 +89,31 @@ class BinaryCLT:
         plt.show()
 
     def get_log_params(self):
-        pass
+        log_params = np.zeros((self.num_rvs, self.num_states, self.num_states))
+        # calculate the probabilities for root node (no parent)
+        samples_root = self.data[:, self.root]
+        for val_root in range(self.num_states):
+            num_samples_root = sum(samples_root == val_root)
+            prob_root = num_samples_root / self.num_samples
+            for i in range(self.num_states):
+                log_params[self.root, i, val_root] = np.log(prob_root)
+        # calculate the conditional probabilities based on the breadth-first order of the clt (top-down)
+        # skip the root node
+        for cur in self.bfo[1:]:
+            # samples for current node
+            samples_cur = self.data[:, cur]
+            # parent node of current node
+            parent = self.predecessors[cur]
+            samples_parent = self.data[:, parent]
+            for val_parent in range(self.num_states):
+                num_parent_samples = sum(samples_parent == val_parent)
+                prob_parent = (2 * self.alpha + num_parent_samples) / (4 * self.alpha + self.num_samples)
+                for val_cur in range(self.num_states):
+                    num_joint_samples = sum(np.logical_and(samples_cur == val_cur, samples_parent == val_parent))
+                    prob_joint = (self.alpha + num_joint_samples) / (4 * self.alpha + self.num_samples)
+                    log_params[cur, val_parent, val_cur] = np.log(prob_joint / prob_parent)
+        self.log_params = log_params
+        return log_params
 
     def log_prob(self, x, exhaustive=False):
         pass
@@ -96,17 +124,18 @@ class BinaryCLT:
 
 if __name__ == "__main__":
     with open('nltcs.train.data', 'r') as file:
-        reader = csv.reader(file, delimiter = ',')
+        reader = csv.reader(file, delimiter=',')
         train = np.array(list(reader)).astype(np.float)
 
     with open('nltcs.test.data', 'r') as file:
-        reader = csv.reader(file, delimiter = ',')
+        reader = csv.reader(file, delimiter=',')
         test = np.array(list(reader)).astype(np.float)
-        
+
     with open('nltcs.valid.data', 'r') as file:
-        reader = csv.reader(file, delimiter = ',')
+        reader = csv.reader(file, delimiter=',')
         valid = np.array(list(reader)).astype(np.float)
 
     clt = BinaryCLT(train)
     print(clt.get_tree())
     clt.plot_tree()
+    print(clt.get_log_params())
