@@ -115,8 +115,53 @@ class BinaryCLT:
         self.log_params = log_params
         return log_params
 
-    def log_prob(self, x, exhaustive=False):
-        pass
+    def log_prob(self, x, exhaustive=True):
+        num_queries = x.shape[0]
+        log_probs = np.zeros(num_queries)
+        # exhaustive inference
+        if exhaustive:
+            for i in tqdm(range(num_queries)):
+                query = x[i]
+                num_missing_rvs = sum(np.isnan(query))
+                if num_missing_rvs == 0:
+                    # log_probs_query = []
+                    lp = 0
+                    for rv in range(self.num_rvs):
+                        parent = self.predecessors[rv]
+                        if parent == -1:
+                            # log_probs_query.append(self.log_params[rv, 0, int(query[rv])])
+                            lp += self.log_params[rv, 0, int(query[rv])]
+                        else:
+                            # log_probs_query.append(self.log_params[rv, int(query[parent]), int(query[rv])])
+                            lp += self.log_params[rv, int(query[parent]), int(query[rv])]
+                    # log_probs[i] = logsumexp(log_probs_query)
+                    # log_probs[i] = np.log(np.prod(np.exp(log_probs_query)))
+                    log_probs[i] = lp
+                else:
+                    missing_rv_val_combinations = list(itertools.product(range(self.num_states), repeat=num_missing_rvs))
+                    marginal_observed = []
+                    for missing_rv_vals in missing_rv_val_combinations:
+                        masked_query = np.copy(query)
+                        masked_query[np.isnan(masked_query)] = missing_rv_vals
+                        # log_probs_query = []
+                        lp = 0
+                        for rv in range(self.num_rvs):
+                            parent = self.predecessors[rv]
+                            if parent == -1:
+                                # log_probs_query.append(self.log_params[rv, 0, int(masked_query[rv])])
+                                lp += self.log_params[rv, 0, int(masked_query[rv])]
+                            else:
+                                # log_probs_query.append(self.log_params[rv, int(masked_query[parent]), int(masked_query[rv])])
+                                lp += self.log_params[rv, int(masked_query[parent]), int(masked_query[rv])]
+                        # marginal_observed += logsumexp(log_probs_query)
+                        # marginal_observed += np.log(np.prod(np.exp(log_probs_query)))
+                        print(np.exp(lp))
+                        marginal_observed.append(lp)
+                    log_probs[i] = np.log(np.sum(np.exp(marginal_observed)))
+        else:
+            pass
+        print(np.sum(np.exp(log_probs)))
+        return log_probs
 
     def sample(self, n_samples):
         pass
@@ -135,7 +180,12 @@ if __name__ == "__main__":
         reader = csv.reader(file, delimiter=',')
         valid = np.array(list(reader)).astype(np.float)
 
+    with open('nltcs_marginals.data', 'r') as file:
+        reader = csv.reader(file, delimiter=',')
+        queries = np.array(list(reader)).astype(np.float)
+
     clt = BinaryCLT(train)
     print(clt.get_tree())
     clt.plot_tree()
     print(clt.get_log_params())
+    print(clt.log_prob(queries, exhaustive=True))
