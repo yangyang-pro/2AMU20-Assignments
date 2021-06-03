@@ -1,4 +1,3 @@
-from numpy.random import triangular
 from scipy.sparse.csgraph import minimum_spanning_tree
 from scipy.sparse.csgraph import breadth_first_order
 from scipy.special import logsumexp
@@ -22,6 +21,8 @@ class BinaryCLT:
         self.num_samples = data.shape[0]
         # number of random variables
         self.num_rvs = data.shape[1]
+        # labels of random variables
+        self.rvs = np.arange(self.num_rvs)
         # Chow-Liu trees, stored as a sparse matrix
         self.clt = self.create_clt()
         # list of predecessors of the learned structure: If X_j is the parent of X_i then tree[i] =
@@ -41,8 +42,7 @@ class BinaryCLT:
         return mi
 
     def create_clt(self):
-        rvs = np.arange(self.num_rvs)
-        rv_combinations = list(itertools.combinations(rvs, 2))
+        rv_combinations = list(itertools.combinations(self.rvs, 2))
         mi_matrix = np.zeros((self.num_rvs, self.num_rvs))
         for rv_combination in tqdm(rv_combinations):
             # current random variables
@@ -57,15 +57,16 @@ class BinaryCLT:
             marginal_probs_y = np.zeros(self.num_states)
             for val in range(self.num_states):
                 num_samples_x, num_samples_y = sum(samples_x == val), sum(samples_y == val)
-                marginal_probs_x[val] = num_samples_x / self.num_samples
-                marginal_probs_y[val] = num_samples_y / self.num_samples
+                marginal_probs_x[val] = (2 * self.alpha + num_samples_x) / (4 * self.alpha + self.num_samples)
+                marginal_probs_y[val] = (2 * self.alpha + num_samples_y) / (4 * self.alpha + self.num_samples)
 
             # calculate the joint probabilities of x and y by frequencies
             joint_probs_xy = np.zeros((self.num_states, self.num_states))
             for val_x in range(self.num_states):
                 for val_y in range(self.num_states):
                     num_joint_samples = sum(np.logical_and(samples_x == val_x, samples_y == val_y))
-                    joint_probs_xy[val_x, val_y] = num_joint_samples / self.num_samples
+                    joint_probs_xy[val_x, val_y] = (self.alpha + num_joint_samples) / \
+                                                   (4 * self.alpha + self.num_samples)
             mi_matrix[x, y] = self.compute_mi(marginals_x=marginal_probs_x,
                                               marginals_y=marginal_probs_y,
                                               joints_xy=joint_probs_xy)
@@ -134,7 +135,8 @@ class BinaryCLT:
                 # otherwise we need to calculte the marginal probabilities of known random variables
                 else:
                     # to get marginals, we need to consider every combinations of values of the random variables
-                    missing_rv_val_combinations = list(itertools.product(range(self.num_states), repeat=num_missing_rvs))
+                    missing_rv_val_combinations = list(itertools.product(range(self.num_states),
+                                                                         repeat=num_missing_rvs))
                     marginal_observed = []
                     for missing_rv_vals in missing_rv_val_combinations:
                         # for each combination, we calculate the corresponding joint probability
@@ -146,15 +148,74 @@ class BinaryCLT:
                             parent = self.predecessors[rv]
                             joint_prob += self.log_params[rv, int(masked_query[parent]), int(masked_query[rv])]
                         marginal_observed.append(joint_prob)
-                    log_probs[i] = np.log(np.sum(np.exp(marginal_observed)))
+                    log_probs[i] = logsumexp(marginal_observed)
         # efficient inference based on message passing
         else:
-            reversed_bfo = self.bfo.reverse()
+            reversed_bfo = self.bfo[::-1]
             for i in tqdm(range(num_queries)):
                 query = queries[i]
-                # for rv in reversed_bfo:
-            pass
+                messages = np.zeros((self.num_rvs, self.num_states))
+                for rv in reversed_bfo[:-1]:
+                    messages = self.message_passing(messages=messages, rv=rv, query=query)
+                root_children = self.rvs[self.predecessors == self.root]
+                if np.isnan(query[self.root]):
+                    marginal_root = 0
+                    for val_root in range(self.num_states):
+                        prob_root = np.exp(self.log_params[self.root, 0, val_root])
+                        for child in root_children:
+                            prob_root *= messages[child, val_root]
+                        marginal_root += prob_root
+                    log_probs[i] = np.log(marginal_root)
+                else:
+                    val_root = int(query[self.root])
+                    prob_root = np.exp(self.log_params[self.root, 0, val_root])
+                    for child in root_children:
+                        prob_root *= messages[child, val_root]
+                    log_probs[i] = np.log(prob_root)
+        # print(np.sum(np.exp(log_probs)))
         return log_probs
+
+    def message_passing(self, messages, rv, query):
+        rv_children = self.rvs[self.predecessors == rv]
+        rv_parent = self.predecessors[rv]
+        val_rv = query[rv]
+        val_rv_parent = query[rv_parent]
+        if np.isnan(val_rv) and np.isnan(val_rv_parent):
+            for vp in range(self.num_states):
+                message_vp = 0
+                for vr in range(self.num_states):
+                    prob_rv = np.exp(self.log_params[rv, vp, vr])
+                    for child in rv_children:
+                        prob_rv *= messages[child, vr]
+                    message_vp += prob_rv
+                messages[rv, vp] = message_vp
+        elif np.isnan(val_rv) and not np.isnan(val_rv_parent):
+            val_rv_parent = int(val_rv_parent)
+            message_vp = 0
+            for vr in range(self.num_states):
+                prob_rv = np.exp(self.log_params[rv, val_rv_parent, vr])
+                for child in rv_children:
+                    prob_rv *= messages[child, vr]
+                message_vp += prob_rv
+            messages[rv, val_rv_parent] = message_vp
+        elif not np.isnan(val_rv) and np.isnan(val_rv_parent):
+            val_rv = int(val_rv)
+            for vp in range(self.num_states):
+                message_vp = 0
+                prob_rv = np.exp(self.log_params[rv, vp, val_rv])
+                for child in rv_children:
+                    prob_rv *= messages[child, val_rv]
+                message_vp += prob_rv
+                messages[rv, vp] = message_vp
+        else:
+            val_rv, val_rv_parent = int(val_rv), int(val_rv_parent)
+            message_vp = 0
+            prob_rv = np.exp(self.log_params[rv, val_rv_parent, val_rv])
+            for child in rv_children:
+                prob_rv *= messages[child, val_rv]
+            message_vp += prob_rv
+            messages[rv, val_rv_parent] = message_vp
+        return messages
 
     def sample(self, n_samples):
         pass
@@ -181,4 +242,5 @@ if __name__ == "__main__":
     print(clt.get_tree())
     clt.plot_tree()
     print(clt.get_log_params())
-    print(clt.log_prob(queries, exhaustive=True))
+    # print(clt.log_prob(queries, exhaustive=True))
+    print(clt.log_prob(queries, exhaustive=False))
