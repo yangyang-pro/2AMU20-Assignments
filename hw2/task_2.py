@@ -121,46 +121,39 @@ class BinaryCLT:
         # exhaustive inference
         if exhaustive:
             for i in tqdm(range(num_queries)):
+                # current query
                 query = x[i]
                 num_missing_rvs = sum(np.isnan(query))
+                # if number of missing random variables is 0, we just calculate the joint probability of the query
                 if num_missing_rvs == 0:
-                    # log_probs_query = []
-                    lp = 0
-                    for rv in range(self.num_rvs):
+                    joint_prob = self.log_params[self.root, 0, int(query[self.root])]
+                    for rv in self.bfo[1:]:
                         parent = self.predecessors[rv]
-                        if parent == -1:
-                            # log_probs_query.append(self.log_params[rv, 0, int(query[rv])])
-                            lp += self.log_params[rv, 0, int(query[rv])]
-                        else:
-                            # log_probs_query.append(self.log_params[rv, int(query[parent]), int(query[rv])])
-                            lp += self.log_params[rv, int(query[parent]), int(query[rv])]
-                    # log_probs[i] = logsumexp(log_probs_query)
-                    # log_probs[i] = np.log(np.prod(np.exp(log_probs_query)))
-                    log_probs[i] = lp
+                        joint_prob += self.log_params[rv, int(query[parent]), int(query[rv])]
+                    log_probs[i] = joint_prob
+                # otherwise we need to calculte the marginal probabilities of known random variables
                 else:
+                    # to get marginals, we need to consider every combinations of values of the random variables
                     missing_rv_val_combinations = list(itertools.product(range(self.num_states), repeat=num_missing_rvs))
                     marginal_observed = []
                     for missing_rv_vals in missing_rv_val_combinations:
+                        # for each combination, we calculate the corresponding joint probability
+                        # we construct a "faked" query to calculate the joint more easily
                         masked_query = np.copy(query)
                         masked_query[np.isnan(masked_query)] = missing_rv_vals
-                        # log_probs_query = []
-                        lp = 0
-                        for rv in range(self.num_rvs):
+                        joint_prob = self.log_params[self.root, 0, int(masked_query[self.root])]
+                        for rv in self.bfo[1:]:
                             parent = self.predecessors[rv]
-                            if parent == -1:
-                                # log_probs_query.append(self.log_params[rv, 0, int(masked_query[rv])])
-                                lp += self.log_params[rv, 0, int(masked_query[rv])]
-                            else:
-                                # log_probs_query.append(self.log_params[rv, int(masked_query[parent]), int(masked_query[rv])])
-                                lp += self.log_params[rv, int(masked_query[parent]), int(masked_query[rv])]
-                        # marginal_observed += logsumexp(log_probs_query)
-                        # marginal_observed += np.log(np.prod(np.exp(log_probs_query)))
-                        print(np.exp(lp))
-                        marginal_observed.append(lp)
+                            joint_prob += self.log_params[rv, int(masked_query[parent]), int(masked_query[rv])]
+                        marginal_observed.append(joint_prob)
                     log_probs[i] = np.log(np.sum(np.exp(marginal_observed)))
+        # efficient inference based on message passing
         else:
+            reversed_bfo = self.bfo.reverse()
+            for i in tqdm(range(num_queries)):
+                query = queries[i]
+                # for rv in reversed_bfo:
             pass
-        print(np.sum(np.exp(log_probs)))
         return log_probs
 
     def sample(self, n_samples):
@@ -180,7 +173,7 @@ if __name__ == "__main__":
         reader = csv.reader(file, delimiter=',')
         valid = np.array(list(reader)).astype(np.float)
 
-    with open('nltcs_marginals.data', 'r') as file:
+    with open('test.data', 'r') as file:
         reader = csv.reader(file, delimiter=',')
         queries = np.array(list(reader)).astype(np.float)
 
