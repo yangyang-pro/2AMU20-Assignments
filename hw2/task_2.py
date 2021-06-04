@@ -3,6 +3,7 @@ import csv
 import itertools
 import networkx
 import matplotlib.pyplot as plt
+import time
 from scipy.sparse.csgraph import minimum_spanning_tree
 from scipy.sparse.csgraph import breadth_first_order
 from scipy.special import logsumexp
@@ -70,16 +71,15 @@ class BinaryCLT:
             marginal_probs_y = np.zeros(self.num_states)
             for val in range(self.num_states):
                 num_samples_x, num_samples_y = sum(samples_x == val), sum(samples_y == val)
-                marginal_probs_x[val] = (2 * self.alpha + num_samples_x) / (4 * self.alpha + self.num_samples)
-                marginal_probs_y[val] = (2 * self.alpha + num_samples_y) / (4 * self.alpha + self.num_samples)
+                marginal_probs_x[val] = num_samples_x / self.num_samples
+                marginal_probs_y[val] = num_samples_y / self.num_samples
 
             # calculate the joint probabilities of x and y by frequencies
             joint_probs_xy = np.zeros((self.num_states, self.num_states))
             for val_x in range(self.num_states):
                 for val_y in range(self.num_states):
                     num_joint_samples = sum(np.logical_and(samples_x == val_x, samples_y == val_y))
-                    joint_probs_xy[val_x, val_y] = (self.alpha + num_joint_samples) / \
-                                                   (4 * self.alpha + self.num_samples)
+                    joint_probs_xy[val_x, val_y] = num_joint_samples / self.num_samples
             mi_matrix[x, y] = self.compute_mi(marginals_x=marginal_probs_x,
                                               marginals_y=marginal_probs_y,
                                               joints_xy=joint_probs_xy)
@@ -222,7 +222,6 @@ class BinaryCLT:
                     for child in root_children:
                         prob_root *= messages[child, val_root]
                     lp[i] = np.log(prob_root)
-        print(np.sum(np.exp(lp)))
         return lp
 
     def message_passing(self, messages, rv, query):
@@ -332,9 +331,32 @@ if __name__ == "__main__":
         reader = csv.reader(file, delimiter=',')
         queries = np.array(list(reader)).astype(np.float)
 
+    print('-------------------- Constructing Chow-Liu Tree --------------------')
     clt = BinaryCLT(train)
-    print(clt.get_tree())
+    print('---------------- Finished Constructing Chow-Liu Tree  --------------')
+    print('-------------------- Computing Tree Structure ----------------------')
+    predecessors = clt.get_tree()
+    print('predecessors list:', predecessors)
     clt.plot_tree()
+    print('---------------- Finished Computing Tree Structure  ----------------')
+    print('----------- Computing Conditional Probabilities Table --------------')
     print(clt.get_log_params())
-    # print(clt.log_prob(queries, exhaustive=True))
-    print(clt.log_prob(queries, exhaustive=False))
+    print('------- Finished Computing Conditional Probabilities Table ---------')
+    print('-------------------- Exhaustive Inference  -------------------------')
+    start_time = time.time()
+    lp_exhaustive = clt.log_prob(queries, exhaustive=True)
+    time_cost = time.time() - start_time
+    print('lp shape:', lp_exhaustive.shape)
+    print('time cost for exhaustive inference:', time_cost)
+    print('---------------- Finished Exhaustive Inference  --------------------')
+    print('--------------------- Efficient Inference  -------------------------')
+    start_time = time.time()
+    lp_efficient = clt.log_prob(queries, exhaustive=False)
+    time_cost = time.time() - start_time
+    print('lp shape:', lp_efficient.shape)
+    print('time cost for exhaustive inference:', time_cost)
+    print('---------------- Finished Efficient Inference  ---------------------')
+    print('---------------------- Ancestral Sampling --------------------------')
+    samples = clt.sample(n_samples=1000)
+    print('samples shape:', samples.shape)
+    print('---------------- Finished Ancestral Sampling -----------------------')
