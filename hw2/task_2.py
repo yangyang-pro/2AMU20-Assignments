@@ -152,7 +152,7 @@ class BinaryCLT:
 
     def log_likelihood(self, x):
         """
-        compute the log-likelihood of a given data set, by calculating the log-probabilities 
+        compute the average log-likelihood of a given data set, by calculating the log-probabilities 
         for every row and then obtaining the mean of the sum of the calculated log-probs.
         """
         
