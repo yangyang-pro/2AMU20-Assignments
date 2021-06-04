@@ -152,26 +152,27 @@ class BinaryCLT:
 
     def log_likelihood(self, x):
         num_queries = x.shape[0]
-        
+        log_like=[]
+        final_log_like=[]
         for i in tqdm(range(num_queries)):
             query = x[i]
             output=[]
-            log_like=[]
-            final_log_like=[]
             #print(x[i],'xi')
-            prob_root = np.exp(self.log_params[self.root, 0, int(query[self.root])])
+            prob_root = self.log_params[self.root, 0, int(query[self.root])]
             log_like.append(prob_root)
             #print(log_like,'log_like')
             for rv in self.bfo[1:]:
                 rv_parent = self.predecessors[rv]
                 val_parent = int(query[int(rv_parent)])
-                prob_rv = np.exp(self.log_params[rv, val_parent, int(query[rv])])
-                output.append(prob_rv)
+                prob_rv = self.log_params[rv, val_parent, int(query[rv])]
+                output.append(prob_rv)  
                 #print(output)
-            log_like = np.mean(output)
+            u = np.sum(output)
+            log_like.append(u)
+            output.clear()
+        print(len(output))
             #print(log_like,'log_like')
-            final_log_like=np.mean(log_like)
-            
+        final_log_like=np.mean(log_like)
         return final_log_like
         
     def log_prob(self, x, exhaustive=True):
