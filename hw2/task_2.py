@@ -151,27 +151,32 @@ class BinaryCLT:
         return log_params
 
     def log_likelihood(self, x):
+        """
+        compute the log-likelihood of a given data set, by calculating the log-probabilities 
+        for every row and then obtaining the mean of the sum of the calculated log-probs.
+        """
+        
         num_queries = x.shape[0]
         log_like=[]
         final_log_like=[]
+        #itterate in every row of our dataset
         for i in tqdm(range(num_queries)):
             query = x[i]
             output=[]
-            #print(x[i],'xi')
+            # calculate the log-prob for the root node
             prob_root = self.log_params[self.root, 0, int(query[self.root])]
             log_like.append(prob_root)
-            #print(log_like,'log_like')
+            # calculate the log-prob for every other node
             for rv in self.bfo[1:]:
-                rv_parent = self.predecessors[rv]
-                val_parent = int(query[int(rv_parent)])
-                prob_rv = self.log_params[rv, val_parent, int(query[rv])]
-                output.append(prob_rv)  
-                #print(output)
+                parent = self.predecessors[rv]
+                val_parent = int(query[int(parent)])
+                prob = self.log_params[rv, val_parent, int(query[rv])]
+                output.append(prob)  
+            #use the log-prob to calculate the log likelihood   
             u = np.sum(output)
             log_like.append(u)
             output.clear()
-        print(len(output))
-            #print(log_like,'log_like')
+
         final_log_like=np.mean(log_like)
         return final_log_like
         
