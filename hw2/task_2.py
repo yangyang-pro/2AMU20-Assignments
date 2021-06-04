@@ -8,7 +8,6 @@ from scipy.sparse.csgraph import minimum_spanning_tree
 from scipy.sparse.csgraph import breadth_first_order
 from scipy.special import logsumexp
 from networkx.drawing.nx_pydot import graphviz_layout
-from tqdm import tqdm
 
 
 class BinaryCLT:
@@ -58,7 +57,7 @@ class BinaryCLT:
         mi_matrix = np.zeros((self.num_rvs, self.num_rvs))
         # consider every combination of two random variables
         rv_combinations = list(itertools.combinations(self.rvs, 2))
-        for rv_combination in tqdm(rv_combinations):
+        for rv_combination in rv_combinations:
             # current random variables
             x, y = rv_combination
             # samples for current random variables
@@ -150,36 +149,6 @@ class BinaryCLT:
         self.log_params = log_params
         return log_params
 
-    def log_likelihood(self, x):
-        """
-        compute the average log-likelihood of a given data set, by calculating the log-probabilities 
-        for every row and then obtaining the mean of the sum of the calculated log-probs.
-        """
-        
-        num_queries = x.shape[0]
-        log_like=[]
-        final_log_like=[]
-        #itterate in every row of our dataset
-        for i in tqdm(range(num_queries)):
-            query = x[i]
-            output=[]
-            # calculate the log-prob for the root node
-            prob_root = self.log_params[self.root, 0, int(query[self.root])]
-            log_like.append(prob_root)
-            # calculate the log-prob for every other node
-            for rv in self.bfo[1:]:
-                parent = self.predecessors[rv]
-                val_parent = int(query[int(parent)])
-                prob = self.log_params[rv, val_parent, int(query[rv])]
-                output.append(prob)  
-            #use the log-prob to calculate the log likelihood   
-            u = np.sum(output)
-            log_like.append(u)
-            output.clear()
-
-        final_log_like=np.mean(log_like)
-        return final_log_like
-        
     def log_prob(self, x, exhaustive=True):
         """
         Task 2c Inference
@@ -191,7 +160,7 @@ class BinaryCLT:
         lp = np.zeros(num_queries)
         # exhaustive inference
         if exhaustive:
-            for i in tqdm(range(num_queries)):
+            for i in range(num_queries):
                 # current query
                 query = x[i]
                 num_missing_rvs = sum(np.isnan(query))
@@ -225,7 +194,7 @@ class BinaryCLT:
             # Every node can send a message if and only if it has received messages from all its children
             # so we use a reversed topological order (reversed breadth-first order is exactly the same)
             reversed_bfo = self.bfo[::-1]
-            for i in tqdm(range(num_queries)):
+            for i in range(num_queries):
                 # current query
                 query = x[i]
                 # initialize a message array (num_rvs, 2) with 0 to store the messages for each random variable
@@ -323,7 +292,7 @@ class BinaryCLT:
         :return: a sample matrix with shape (n_samples, num_rvs)
         """
         samples = np.zeros((n_samples, self.num_rvs))
-        for i in tqdm(range(n_samples)):
+        for i in range(n_samples):
             # we treat the root node as a special case since it has no parent
             root = self.root
             # get the probability of root node from the CPT
@@ -342,6 +311,27 @@ class BinaryCLT:
                 random_number = np.random.uniform(0, 1)
                 samples[i, rv] = 1 if random_number <= prob_rv else 0
         return samples
+
+    def log_likelihood(self, x):
+        """
+        compute the average log-likelihood of a given data set
+        :param x: the input samples
+        :return: average log-likelihood
+        """
+        num_queries = x.shape[0]
+        log_like = []
+        # iterate over every row of our dataset
+        for i in range(num_queries):
+            query = x[i]
+            # calculate the log-prob for the root node
+            prob_root = self.log_params[self.root, 0, int(query[self.root])]
+            # calculate the log-prob for every other node
+            for rv in self.bfo[1:]:
+                parent = self.predecessors[rv]
+                val_parent = int(query[int(parent)])
+                prob_root += self.log_params[rv, val_parent, int(query[rv])]
+            log_like.append(prob_root)
+        return np.mean(log_like)
 
 
 if __name__ == "__main__":
@@ -367,7 +357,7 @@ if __name__ == "__main__":
     print('-------------------- Computing Tree Structure ----------------------')
     predecessors = clt.get_tree()
     print('predecessors list:', predecessors)
-    #clt.plot_tree()
+    clt.plot_tree()
     print('---------------- Finished Computing Tree Structure  ----------------')
     print('----------- Computing Conditional Probabilities Table --------------')
     print(clt.get_log_params())
@@ -384,13 +374,14 @@ if __name__ == "__main__":
     lp_efficient = clt.log_prob(queries, exhaustive=False)
     time_cost = time.time() - start_time
     print('lp shape:', lp_efficient.shape)
-    print('time cost for exhaustive inference:', time_cost)
+    print('time cost for efficient inference:', time_cost)
     print('---------------- Finished Efficient Inference  ---------------------')
     print('---------------------- Ancestral Sampling --------------------------')
     samples = clt.sample(n_samples=1000)
     print('samples shape:', samples.shape)
     print('---------------- Finished Ancestral Sampling -----------------------')
-    print('---------------- Calculate log_likelyhood -----------------------')
+    print('---------------- Calculating Log_likelihood ------------------------')
     print(clt.log_likelihood(train))
     print(clt.log_likelihood(test))
     print(clt.log_likelihood(samples))
+    print('--------------------------- Finished -------------------------------')
