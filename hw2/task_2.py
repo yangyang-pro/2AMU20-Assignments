@@ -150,6 +150,30 @@ class BinaryCLT:
         self.log_params = log_params
         return log_params
 
+    def log_likelihood(self, x):
+        num_queries = x.shape[0]
+        
+        for i in tqdm(range(num_queries)):
+            query = x[i]
+            output=[]
+            log_like=[]
+            final_log_like=[]
+            #print(x[i],'xi')
+            prob_root = np.exp(self.log_params[self.root, 0, 1])
+            log_like.append(prob_root)
+            #print(log_like,'log_like')
+            for rv in self.bfo[1:]:
+                rv_parent = self.predecessors[rv]
+                val_parent = int(query[int(rv_parent)])
+                prob_rv = np.exp(self.log_params[rv, val_parent, 1])
+                output.append(prob_rv)
+                #print(output)
+            log_like = np.mean(output)
+            #print(log_like,'log_like')
+            final_log_like=np.mean(log_like)
+            
+        return final_log_like
+        
     def log_prob(self, x, exhaustive=True):
         """
         Task 2c Inference
@@ -337,26 +361,28 @@ if __name__ == "__main__":
     print('-------------------- Computing Tree Structure ----------------------')
     predecessors = clt.get_tree()
     print('predecessors list:', predecessors)
-    clt.plot_tree()
+    #clt.plot_tree()
     print('---------------- Finished Computing Tree Structure  ----------------')
     print('----------- Computing Conditional Probabilities Table --------------')
     print(clt.get_log_params())
     print('------- Finished Computing Conditional Probabilities Table ---------')
     print('-------------------- Exhaustive Inference  -------------------------')
     start_time = time.time()
-    lp_exhaustive = clt.log_prob(queries, exhaustive=True)
+    #lp_exhaustive = clt.log_prob(queries, exhaustive=True)
     time_cost = time.time() - start_time
-    print('lp shape:', lp_exhaustive.shape)
+    #print('lp shape:', lp_exhaustive.shape)
     print('time cost for exhaustive inference:', time_cost)
     print('---------------- Finished Exhaustive Inference  --------------------')
     print('--------------------- Efficient Inference  -------------------------')
     start_time = time.time()
-    lp_efficient = clt.log_prob(queries, exhaustive=False)
+    #lp_efficient = clt.log_prob(queries, exhaustive=False)
     time_cost = time.time() - start_time
-    print('lp shape:', lp_efficient.shape)
+    #print('lp shape:', lp_efficient.shape)
     print('time cost for exhaustive inference:', time_cost)
     print('---------------- Finished Efficient Inference  ---------------------')
     print('---------------------- Ancestral Sampling --------------------------')
     samples = clt.sample(n_samples=1000)
     print('samples shape:', samples.shape)
     print('---------------- Finished Ancestral Sampling -----------------------')
+    print(clt.log_likelihood(train))
+    print(clt.log_likelihood(test))
